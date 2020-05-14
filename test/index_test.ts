@@ -109,5 +109,14 @@ describe('index', () => {
             assert.equal(await query('1 = mykey', { mykey: async () => 1 }), true);
             assert.equal(await query('1 = mykey', { mykey: () => new Promise((resolve, _reject) => process.nextTick(() => resolve(1))) }), true);
         });
+        it('waits for function promise recursively', async () => {
+            assert.equal(await query('1 = mykey.mykey2', { mykey: () => new Promise((resolve, _reject) => process.nextTick(() => resolve(
+                {
+                    mykey2: () => new Promise((resolve2, _reject) => process.nextTick(() => resolve2(
+                        1
+                    ))),
+                }
+            ))) }), true);
+        });
     });
 });

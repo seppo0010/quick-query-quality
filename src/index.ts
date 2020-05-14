@@ -125,6 +125,9 @@ class Query extends EmbeddedActionsParser {
     if (tokenMatcher(val, ObjectPath)) {
       return val.image.split('.').reduce((v: { value: any, path: string[]}, key: string) => {
         const path = v.path.concat([key]);
+        if (v.value instanceof Promise) {
+          return v
+        }
         let subv = v.value[key] || { };
         if (typeof(subv) === 'function') {
           const strPath = path.join('.');
@@ -139,7 +142,7 @@ class Query extends EmbeddedActionsParser {
             }
           }
         }
-        return { value: subv, path};
+        return { value: subv, path };
       }, { value: this.context, path: []}).value || null;
     }
     throw new Error('unimplemented value type');
