@@ -1,0 +1,19 @@
+{
+  "name": "qqq",
+  "version": "1.0.0",
+  "description": "quick query question",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/seppo0010/qqq.git"
+  },
+  "author": "Sebastian Waisbrot",
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/seppo0010/qqq/issues"
+  },
+  "homepage": "https://github.com/seppo0010/qqq#readme"
+}
