@@ -4,7 +4,7 @@
   "description": "quick query question",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "tslint -c tslint.json {src,test}/**/*.ts && ts-mocha -p tsconfig.json test/*"
   },
   "repository": {
     "type": "git",
@@ -17,9 +17,13 @@
   },
   "homepage": "https://github.com/seppo0010/qqq#readme",
   "dependencies": {
-    "ts-node": "^8.10.1"
+    "@types/node": "^14.0.1",
+    "chevrotain": "^7.0.1",
+    "ts-node": "^8.10.1",
+    "typescript": "^3.9.2"
   },
   "devDependencies": {
+    "mocha": "^7.1.2",
     "ts-mocha": "^7.0.0",
     "tslint": "^6.1.2"
   }
