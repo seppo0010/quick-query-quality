@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        "outDir": "./built",
+        "allowJs": false,
+        "strict": true,
+        "target": "es5"
+    },
+    "include": [
+        "./src/**/*",
+        "./test/**/*"
+    ]
+}

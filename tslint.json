@@ -1,0 +1,23 @@
+{
+    "defaultSeverity": "error",
+    "extends": [
+        "tslint:recommended"
+    ],
+    "jsRules": {},
+    "rules": {
+        "eofline": true,
+        "indent": [true, "spaces", 4],
+        "linebreak-style": [true, "LF"],
+        "new-parens": true,
+        "no-consecutive-blank-lines": true,
+        "max-classes-per-file": false,
+        "no-irregular-whitespace": true,
+        "no-trailing-whitespace": true,
+        "number-literal-format": true,
+        "semicolon": [true, "always"],
+        "quotemark": [true, "single"],
+        "trailing-comma": [true, {"multiline": "always", "singleline": "never"}],
+        "whitespace": [true, "check-branch", "check-decl", "check-operator", "check-module", "check-separator", "check-rest-spread", "check-type", "check-typecast", "check-type-operator", "check-preblock", "check-postbrace"]
+    },
+    "rulesDirectory": []
+}

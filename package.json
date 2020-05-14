@@ -15,5 +15,12 @@
   "bugs": {
     "url": "https://github.com/seppo0010/qqq/issues"
   },
-  "homepage": "https://github.com/seppo0010/qqq#readme"
+  "homepage": "https://github.com/seppo0010/qqq#readme",
+  "dependencies": {
+    "ts-node": "^8.10.1"
+  },
+  "devDependencies": {
+    "ts-mocha": "^7.0.0",
+    "tslint": "^6.1.2"
+  }
 }
