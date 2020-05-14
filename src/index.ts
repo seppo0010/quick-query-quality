@@ -12,6 +12,7 @@ const RParen = createToken({ name: 'RParen', pattern: /\)/});
 const Value = createToken({ name: 'Value', pattern: Lexer.NA });
 const NumberLiteral = createToken({ name: 'NumberLiteral', pattern: /(?:0|[1-9]\d*)/, categories: Value});
 const StringLiteral = createToken({ name: 'StringLiteral', pattern: /"(?:[^"\\]|\\.)*"/, categories: Value});
+const ObjectPath = createToken({ name: 'ObjectPath', pattern: /[a-zA-Z][a-zA-Z0-9\.]*/, categories: Value});
 const Comparison = createToken({ name: 'Comparison', pattern: Lexer.NA });
 const GreaterThanOrEqual = createToken({ name: 'GreaterThanOrEqual', pattern: />=/, categories: Comparison});
 const GreaterThan = createToken({ name: 'GreaterThan', pattern: />[^=]/, categories: Comparison});
@@ -20,13 +21,13 @@ const LessThan = createToken({ name: 'LessThan', pattern: /<[^=]/, categories: C
 const Equal = createToken({ name: 'Equal', pattern: /={1,3}/, categories: Comparison});
 
 const WhiteSpace = createToken({
-name: 'WhiteSpace',
-pattern: /\s+/,
-group: Lexer.SKIPPED,
+  name: 'WhiteSpace',
+  pattern: /\s+/,
+  group: Lexer.SKIPPED,
 });
 
 // whitespace is normally very common so it is placed first to speed up the lexer
-const allTokens = [WhiteSpace, LParen, RParen, NumberLiteral, Connector, And, Or, StringLiteral, GreaterThanOrEqual , GreaterThan , LessThanOrEqual , LessThan , Equal ];
+const allTokens = [WhiteSpace, LParen, RParen, NumberLiteral, Connector, And, Or, StringLiteral, GreaterThanOrEqual, GreaterThan, LessThanOrEqual, LessThan, Equal, ObjectPath];
 const QLexer = new Lexer(allTokens);
 
 declare interface Query {
@@ -36,7 +37,10 @@ declare interface Query {
   comparisonExpression: any;
   parenthesisExpression: any;
 }
+
 class Query extends EmbeddedActionsParser {
+  static context: any;
+
   constructor() {
     super(allTokens);
 
@@ -80,20 +84,20 @@ class Query extends EmbeddedActionsParser {
       if (token.tokenType.name === 'RECORDING_PHASE_TOKEN') {
         return;
       }
-      value = JSON.parse(token.image);
+      value = this.getValue(token);
       op = $.CONSUME(Comparison);
-      rhsVal = JSON.parse($.CONSUME2(Value).image);
+      rhsVal = this.getValue($.CONSUME2(Value));
 
       if (tokenMatcher(op, GreaterThan)) {
           return value > rhsVal;
       } else if (tokenMatcher(op, GreaterThanOrEqual)) {
-          return value >= rhsVal;
+        return value >= rhsVal;
       } else if (tokenMatcher(op, LessThan)) {
-          return value < rhsVal;
+        return value < rhsVal;
       } else if (tokenMatcher(op, LessThanOrEqual)) {
-          return value <= rhsVal;
+        return value <= rhsVal;
       } else if (tokenMatcher(op, Equal)) {
-          return value === rhsVal;
+        return value === rhsVal;
       }
       return false;
     });
@@ -107,14 +111,26 @@ class Query extends EmbeddedActionsParser {
 
     this.performSelfAnalysis();
   }
+
+  getValue(val: chevrotain.IToken): any {
+    if (tokenMatcher(val, NumberLiteral) || tokenMatcher(val, StringLiteral)) {
+      return JSON.parse(val.image);
+    }
+    if (tokenMatcher(val, ObjectPath)) {
+      return val.image.split('.').reduce((v, key) => v[key] || { }, Query.context) || null;
+    }
+    throw new Error('unimplemented value type');
+  }
 }
 
 const parser = new Query();
 
-export default function (query: string): boolean {
+export default function (query: string, context?: any): boolean {
+  Query.context = context;
   const lexingResult = QLexer.tokenize(query);
   parser.input = lexingResult.tokens;
   const val = parser.expression();
+  Query.context = null;
 
   if (parser.errors.length > 0) {
     throw new Error(parser.errors.join('\n'));

@@ -74,4 +74,18 @@ describe('index', () => {
             assert.equal(query('1 = 2 AND (2 = 3 OR 2 = 2)'), false);
         });
     });
+    describe('context', () => {
+        it('should read a property of the context', () => {
+            assert.equal(query('1 = mykey', { mykey: 1}), true);
+            assert.equal(query('1 = mykey', { mykey: 2}), false);
+        });
+        it('should read read a property recursively', () => {
+            assert.equal(query('1 = mykey.x', { mykey: { x: 1 }}), true);
+            assert.equal(query('1 = mykey.x', { mykey: { x: 2 }}), false);
+        });
+        it('should be resilient to missing keys', () => {
+            assert.equal(query('1 = mykey', { }), false);
+            assert.equal(query('1 = mykey.x', { }), false);
+        });
+    });
 });
