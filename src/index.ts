@@ -146,6 +146,23 @@ class Query extends EmbeddedActionsParser {
   }
 }
 
+export function querySync(query: string, context?: any): boolean {
+  const parser = new Query();
+  parser.context = context;
+  parser.cache = { };
+  parser.promises = [];
+  const lexingResult = QLexer.tokenize(query);
+  parser.input = lexingResult.tokens;
+  let val = parser.expression();
+  if (parser.promises.length) {
+    throw new Error('Promise return in querySync is not supported.')
+  }
+  if (parser.errors.length > 0) {
+    throw new Error(parser.errors.join('\n'));
+  }
+  return val;
+};
+
 export default async (query: string, context?: any): Promise<boolean> => {
   let promisesLength;
   let val;
