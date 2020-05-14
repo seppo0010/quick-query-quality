@@ -40,6 +40,7 @@ declare interface Query {
 
 class Query extends EmbeddedActionsParser {
   static context: any;
+  static cache: any;
 
   constructor() {
     super(allTokens);
@@ -117,7 +118,20 @@ class Query extends EmbeddedActionsParser {
       return JSON.parse(val.image);
     }
     if (tokenMatcher(val, ObjectPath)) {
-      return val.image.split('.').reduce((v, key) => v[key] || { }, Query.context) || null;
+      return val.image.split('.').reduce((v: { value: any, path: string[]}, key: string) => {
+        const path = v.path.concat([key]);
+        let subv = v.value[key] || { };
+        if (typeof(subv) === 'function') {
+          const strPath = path.join('.');
+          if (typeof Query.cache[strPath] !== 'undefined') {
+            subv = Query.cache[strPath];
+          } else {
+            subv = subv();
+            Query.cache[strPath] = subv;
+          }
+        }
+        return { value: subv, path};
+      }, { value: Query.context, path: []}).value || null;
     }
     throw new Error('unimplemented value type');
   }
@@ -127,10 +141,12 @@ const parser = new Query();
 
 export default function (query: string, context?: any): boolean {
   Query.context = context;
+  Query.cache = { };
   const lexingResult = QLexer.tokenize(query);
   parser.input = lexingResult.tokens;
   const val = parser.expression();
   Query.context = null;
+  Query.cache = null;
 
   if (parser.errors.length > 0) {
     throw new Error(parser.errors.join('\n'));

@@ -88,4 +88,18 @@ describe('index', () => {
             assert.equal(query('1 = mykey.x', { }), false);
         });
     });
+    describe('promises', () => {
+        it('calls a function', () => {
+            assert.equal(query('1 = mykey', { mykey: () => 1 }), true);
+            assert.equal(query('1 = mykey', { mykey: () => 2 }), false);
+        });
+        it('calls a function once', () => {
+            let calls = 0;
+            assert.equal(query('1 = mykey AND 2 > mykey', { mykey: () => {
+                calls++;
+                return 1;
+            } }), true);
+            assert.equal(calls, 1);
+        });
+    });
 });
