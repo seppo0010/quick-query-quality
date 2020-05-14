@@ -1,10 +1,10 @@
 {
   "name": "quick-query-quality",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "quick query question",
   "main": "built/src/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --declaration",
     "test": "tslint -c tslint.json {src,test}/**/*.ts && ts-mocha -p tsconfig.json test/*"
   },
   "repository": {
