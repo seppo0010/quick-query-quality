@@ -4,6 +4,7 @@
   "description": "quick query question",
   "main": "index.js",
   "scripts": {
+    "build": "tsc",
     "test": "tslint -c tslint.json {src,test}/**/*.ts && ts-mocha -p tsconfig.json test/*"
   },
   "repository": {
@@ -23,6 +24,7 @@
     "typescript": "^3.9.2"
   },
   "devDependencies": {
+    "@types/mocha": "^7.0.2",
     "mocha": "^7.1.2",
     "ts-mocha": "^7.0.0",
     "tslint": "^6.1.2"
