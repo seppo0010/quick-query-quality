@@ -1,4 +1,5 @@
 import * as chevrotain from 'chevrotain';
+import { promises } from 'fs';
 const createToken = chevrotain.createToken;
 const tokenMatcher = chevrotain.tokenMatcher;
 const Lexer = chevrotain.Lexer;
@@ -39,8 +40,9 @@ declare interface Query {
 }
 
 class Query extends EmbeddedActionsParser {
-  static context: any;
-  static cache: any;
+  context: any;
+  cache: any;
+  promises: Promise<any>[] = [];
 
   constructor() {
     super(allTokens);
@@ -123,33 +125,40 @@ class Query extends EmbeddedActionsParser {
         let subv = v.value[key] || { };
         if (typeof(subv) === 'function') {
           const strPath = path.join('.');
-          if (typeof Query.cache[strPath] !== 'undefined') {
-            subv = Query.cache[strPath];
+          if (typeof this.cache[strPath] !== 'undefined') {
+            subv = this.cache[strPath];
           } else {
             subv = subv();
-            Query.cache[strPath] = subv;
+            this.cache[strPath] = subv;
+            if (subv instanceof Promise) {
+              subv.then((subvResolved) => this.cache[strPath] = subvResolved);
+              this.promises.push(subv);
+            }
           }
         }
         return { value: subv, path};
-      }, { value: Query.context, path: []}).value || null;
+      }, { value: this.context, path: []}).value || null;
     }
     throw new Error('unimplemented value type');
   }
 }
 
-const parser = new Query();
-
-export default function (query: string, context?: any): boolean {
-  Query.context = context;
-  Query.cache = { };
-  const lexingResult = QLexer.tokenize(query);
-  parser.input = lexingResult.tokens;
-  const val = parser.expression();
-  Query.context = null;
-  Query.cache = null;
-
-  if (parser.errors.length > 0) {
-    throw new Error(parser.errors.join('\n'));
-  }
+export default async (query: string, context?: any): Promise<boolean> => {
+  let promisesLength;
+  let val;
+  const parser = new Query();
+  parser.context = context;
+  parser.cache = { };
+  parser.promises = [];
+  do {
+    await Promise.all(parser.promises);
+    const lexingResult = QLexer.tokenize(query);
+    parser.input = lexingResult.tokens;
+    promisesLength = parser.promises.length;
+    val = parser.expression();
+    if (parser.errors.length > 0) {
+      throw new Error(parser.errors.join('\n'));
+    }
+  } while (promisesLength !== parser.promises.length);
   return val;
-}
+};
