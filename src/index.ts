@@ -20,6 +20,7 @@ const GreaterThan = createToken({ name: 'GreaterThan', pattern: />[^=]/, categor
 const LessThanOrEqual = createToken({ name: 'LessThanOrEqual', pattern: /<=/, categories: Comparison});
 const LessThan = createToken({ name: 'LessThan', pattern: /<[^=]/, categories: Comparison});
 const Equal = createToken({ name: 'Equal', pattern: /={1,3}/, categories: Comparison});
+const NotEqual = createToken({ name: 'NotEqual', pattern: /!={1,2}/, categories: Comparison});
 
 const WhiteSpace = createToken({
   name: 'WhiteSpace',
@@ -28,7 +29,7 @@ const WhiteSpace = createToken({
 });
 
 // whitespace is normally very common so it is placed first to speed up the lexer
-const allTokens = [WhiteSpace, LParen, RParen, NumberLiteral, Connector, And, Or, StringLiteral, GreaterThanOrEqual, GreaterThan, LessThanOrEqual, LessThan, Equal, ObjectPath];
+const allTokens = [WhiteSpace, LParen, RParen, NumberLiteral, Connector, And, Or, StringLiteral, GreaterThanOrEqual, GreaterThan, LessThanOrEqual, LessThan, Equal, NotEqual, ObjectPath];
 const QLexer = new Lexer(allTokens);
 
 declare interface Query {
@@ -101,6 +102,8 @@ class Query extends EmbeddedActionsParser {
         return value <= rhsVal;
       } else if (tokenMatcher(op, Equal)) {
         return value === rhsVal;
+      } else if (tokenMatcher(op, NotEqual)) {
+        return value !== rhsVal;
       }
       return false;
     });

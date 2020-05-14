@@ -7,34 +7,30 @@ describe('index', () => {
             assert.equal(await query('1 = 1'), true);
             assert.equal(await query('1 == 1'), true);
             assert.equal(await query('1 === 1'), true);
-        });
-        it('should compare not equal numbers', async () => {
             assert.equal(await query('1 = 2'), false);
             assert.equal(await query('1 == 2'), false);
             assert.equal(await query('1 === 2'), false);
         });
+        it('should compare not equal numbers', async () => {
+            assert.equal(await query('1 != 1'), false);
+            assert.equal(await query('1 !== 1'), false);
+            assert.equal(await query('1 != 2'), true);
+            assert.equal(await query('1 !== 2'), true);
+        });
         it('should compare greater than numbers', async () => {
             assert.equal(await query('1 > 0'), true);
-        });
-        it('should compare not greater than numbers', async () => {
             assert.equal(await query('1 > 1'), false);
         });
         it('should compare greater than or equal numbers', async () => {
             assert.equal(await query('1 >= 1'), true);
-        });
-        it('should compare not greater than or equal numbers', async () => {
             assert.equal(await query('1 >= 2'), false);
         });
         it('should compare less than numbers', async () => {
             assert.equal(await query('1 < 2'), true);
-        });
-        it('should compare not less than numbers', async () => {
             assert.equal(await query('1 < 0'), false);
         });
         it('should compare less than or equal numbers', async () => {
             assert.equal(await query('1 <= 1'), true);
-        });
-        it('should compare not less than or equal numbers', async () => {
             assert.equal(await query('1 <= 0'), false);
         });
     });
