@@ -54,6 +54,29 @@ describe('index', () => {
             assert.equal(querySync('1 = 2 AND 2 = 3 AND 3 = 4'), false);
         });
     });
+    describe('bailing', () => {
+        it('should not execute a second AND expression if the first one is false', () => {
+            assert.equal(querySync('1 = 2 AND throwException = true', {
+                throwException: () => {
+                    throw new Error('unreachable');
+                },
+            }), false);
+        });
+        it('should not execute a second OR expression if the first one is true', () => {
+            assert.equal(querySync('1 = 1 OR throwException = true', {
+                throwException: () => {
+                    throw new Error('unreachable');
+                },
+            }), true);
+        });
+        it('should not execute a second OR expression if the first one is true recursively', () => {
+            assert.equal(querySync('1 = 1 OR (throwException = true AND 1 = 2)', {
+                throwException: () => {
+                    throw new Error('unreachable');
+                },
+            }), true);
+        });
+    });
     describe('or', () => {
         it('should be true iff either is true', () => {
             assert.equal(querySync('1 = 1 OR 2 = 2'), true);

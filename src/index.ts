@@ -85,7 +85,7 @@ export class Query {
 
   runSync(context?: any): boolean {
     const runner = new QueryRunner(context);
-    const val = this.parser.expression(true, [runner]);
+    const val = this.parser.expression(true, [runner, true]);
     if (runner.promises.length) {
       throw new Error('Promise return in querySync is not supported.');
     }
@@ -100,7 +100,7 @@ export class Query {
     do {
       await Promise.all(runner.promises);
       promisesLength = runner.promises.length;
-      val = this.parser.expression(true, [runner]);
+      val = this.parser.expression(true, [runner, true]);
       this.parser.reset();
     } while (promisesLength !== runner.promises.length);
     return val;
@@ -121,50 +121,50 @@ class QueryParser extends EmbeddedActionsParser {
 
     const $ = this;
 
-    $.RULE('expression', (runner: QueryRunner) => {
-      return $.SUBRULE($.connectorExpression, { ARGS: [runner]});
+    $.RULE('expression', (runner: QueryRunner, evaluate: boolean) => {
+      return $.SUBRULE($.connectorExpression, { ARGS: [runner, evaluate]});
     });
 
-    $.RULE('connectorExpression', (runner: QueryRunner) => {
-      let value: boolean;
-      let conn;
-      let rhsVal: boolean;
-
-      value = $.SUBRULE($.atomicExpression, { ARGS: [runner]});
+    $.RULE('connectorExpression', (runner: QueryRunner, evaluate: boolean) => {
+      let value = $.SUBRULE($.atomicExpression, { ARGS: [runner, evaluate]});
       $.MANY(() => {
-        conn = $.CONSUME(Connector);
-        rhsVal = $.SUBRULE2($.atomicExpression, { ARGS: [runner]});
+        const conn = $.CONSUME(Connector);
 
         if (tokenMatcher(conn, And)) {
-          value = value && rhsVal;
+          if (value) {
+            value = $.SUBRULE2($.atomicExpression, { ARGS: [runner, evaluate]});
+          } else {
+            $.SUBRULE2($.atomicExpression, { ARGS: [runner, false]});
+          }
         } else {
-          value = value || rhsVal;
+          if (!value) {
+            value = $.SUBRULE2($.atomicExpression, { ARGS: [runner, evaluate]});
+          } else {
+            $.SUBRULE2($.atomicExpression, { ARGS: [runner, false]});
+          }
         }
       });
 
       return value;
     });
 
-    $.RULE('atomicExpression', (runner: QueryRunner) => $.OR([
-      { ALT: () => $.SUBRULE($.parenthesisExpression, { ARGS: [runner]})},
-      { ALT: () => $.SUBRULE($.comparisonExpression, { ARGS: [runner]})},
+    $.RULE('atomicExpression', (runner: QueryRunner, evaluate: boolean) => $.OR([
+      { ALT: () => $.SUBRULE($.parenthesisExpression, { ARGS: [runner, evaluate]})},
+      { ALT: () => $.SUBRULE($.comparisonExpression, { ARGS: [runner, evaluate]})},
     ]));
 
-    $.RULE('comparisonExpression', (runner: QueryRunner) => {
-      let value;
-      let op;
-      let rhsVal;
-
+    $.RULE('comparisonExpression', (runner: QueryRunner, evaluate: boolean) => {
       const token = $.CONSUME(Value);
       if (token.tokenType.name === 'RECORDING_PHASE_TOKEN') {
         return;
       }
-      value = runner.getValue(token);
-      op = $.CONSUME(Comparison);
-      rhsVal = runner.getValue($.CONSUME2(Value));
+      const value = evaluate && runner.getValue(token);
+      const op = $.CONSUME(Comparison);
+      const rhsToken = $.CONSUME2(Value);
+      const rhsVal = evaluate && runner.getValue(rhsToken);
 
       if (tokenMatcher(op, GreaterThan)) {
-          return value > rhsVal;
+        return value > rhsVal;
       } else if (tokenMatcher(op, GreaterThanOrEqual)) {
         return value >= rhsVal;
       } else if (tokenMatcher(op, LessThan)) {
@@ -179,9 +179,9 @@ class QueryParser extends EmbeddedActionsParser {
       return false;
     });
 
-    $.RULE('parenthesisExpression', (runner: QueryRunner) => {
+    $.RULE('parenthesisExpression', (runner: QueryRunner, evaluate: boolean) => {
       $.CONSUME(LParen);
-      const val = $.SUBRULE($.expression, { ARGS: [runner]});
+      const val = $.SUBRULE($.expression, { ARGS: [runner, evaluate]});
       $.CONSUME(RParen);
       return val;
     });
