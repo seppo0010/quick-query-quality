@@ -126,7 +126,7 @@ class Query extends EmbeddedActionsParser {
       return val.image.split('.').reduce((v: { value: any, path: string[]}, key: string) => {
         const path = v.path.concat([key]);
         if (v.value instanceof Promise) {
-          return v
+          return v;
         }
         let subv = v.value[key] || { };
         if (typeof(subv) === 'function') {
@@ -156,15 +156,15 @@ export function querySync(query: string, context?: any): boolean {
   parser.promises = [];
   const lexingResult = QLexer.tokenize(query);
   parser.input = lexingResult.tokens;
-  let val = parser.expression();
+  const val = parser.expression();
   if (parser.promises.length) {
-    throw new Error('Promise return in querySync is not supported.')
+    throw new Error('Promise return in querySync is not supported.');
   }
   if (parser.errors.length > 0) {
     throw new Error(parser.errors.join('\n'));
   }
   return val;
-};
+}
 
 export default async (query: string, context?: any): Promise<boolean> => {
   let promisesLength;
