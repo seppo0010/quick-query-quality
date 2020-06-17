@@ -1,5 +1,4 @@
 import * as chevrotain from 'chevrotain';
-import { promises } from 'fs';
 const createToken = chevrotain.createToken;
 const tokenMatcher = chevrotain.tokenMatcher;
 const Lexer = chevrotain.Lexer;
@@ -11,7 +10,7 @@ const Or = createToken({ name: 'Or', pattern: /OR/, categories: Connector});
 const LParen = createToken({ name: 'LParen', pattern: /\(/});
 const RParen = createToken({ name: 'RParen', pattern: /\)/});
 const Value = createToken({ name: 'Value', pattern: Lexer.NA });
-const NumberLiteral = createToken({ name: 'NumberLiteral', pattern: /(?:0|[1-9]\d*)/, categories: Value});
+const NumberLiteral = createToken({ name: 'NumberLiteral', pattern: /-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?/, categories: Value});
 const StringLiteral = createToken({ name: 'StringLiteral', pattern: /"(?:[^"\\]|\\.)*"/, categories: Value});
 const ObjectPath = createToken({ name: 'ObjectPath', pattern: /[a-zA-Z][a-zA-Z0-9\.]*/, categories: Value});
 const Comparison = createToken({ name: 'Comparison', pattern: Lexer.NA });

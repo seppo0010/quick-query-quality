@@ -41,6 +41,10 @@ describe('index', () => {
             assert.equal(querySync('1 <= 1'), true);
             assert.equal(querySync('1 <= 0'), false);
         });
+        it('should compare floats', () => {
+            assert.equal(querySync('0.1 < 0.2'), true);
+            assert.equal(querySync('1.21 > 1.2'), true);
+        });
     });
     describe('and', () => {
         it('should be true iff both are true', () => {
