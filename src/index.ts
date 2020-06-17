@@ -32,7 +32,7 @@ const WhiteSpace = createToken({
 const allTokens = [WhiteSpace, LParen, RParen, NumberLiteral, Connector, And, Or, StringLiteral, GreaterThanOrEqual, GreaterThan, LessThanOrEqual, LessThan, Equal, NotEqual, ObjectPath];
 const QLexer = new Lexer(allTokens);
 
-declare interface Query {
+export declare interface Query {
   expression: any;
   atomicExpression: any;
   connectorExpression: any;
@@ -40,13 +40,15 @@ declare interface Query {
   parenthesisExpression: any;
 }
 
-class Query extends EmbeddedActionsParser {
+export class Query extends EmbeddedActionsParser {
+  queryString: string;
   context: any;
   cache: any;
   promises: Promise<any>[] = [];
 
-  constructor() {
+  constructor(queryString: string) {
     super(allTokens);
+    this.queryString = queryString;
 
     const $ = this;
 
@@ -116,6 +118,7 @@ class Query extends EmbeddedActionsParser {
     });
 
     this.performSelfAnalysis();
+    this.input = QLexer.tokenize(queryString).tokens;
   }
 
   getValue(val: chevrotain.IToken): any {
@@ -147,41 +150,50 @@ class Query extends EmbeddedActionsParser {
     }
     throw new Error('unimplemented value type');
   }
-}
 
-export function querySync(query: string, context?: any): boolean {
-  const parser = new Query();
-  parser.context = context;
-  parser.cache = { };
-  parser.promises = [];
-  const lexingResult = QLexer.tokenize(query);
-  parser.input = lexingResult.tokens;
-  const val = parser.expression();
-  if (parser.promises.length) {
-    throw new Error('Promise return in querySync is not supported.');
-  }
-  if (parser.errors.length > 0) {
-    throw new Error(parser.errors.join('\n'));
-  }
-  return val;
-}
-
-export default async (query: string, context?: any): Promise<boolean> => {
-  let promisesLength;
-  let val;
-  const parser = new Query();
-  parser.context = context;
-  parser.cache = { };
-  parser.promises = [];
-  do {
-    await Promise.all(parser.promises);
-    const lexingResult = QLexer.tokenize(query);
-    parser.input = lexingResult.tokens;
-    promisesLength = parser.promises.length;
-    val = parser.expression();
-    if (parser.errors.length > 0) {
-      throw new Error(parser.errors.join('\n'));
+  runSync(context?: any): boolean {
+    const input = this.input;
+    this.context = context;
+    this.cache = { };
+    this.promises = [];
+    this.errors = [];
+    const val = this.expression();
+    this.input = input;
+    if (this.promises.length) {
+      throw new Error('Promise return in querySync is not supported.');
     }
-  } while (promisesLength !== parser.promises.length);
-  return val;
-};
+    if (this.errors.length > 0) {
+      throw new Error(this.errors.join('\n'));
+    }
+    return val;
+  }
+
+  async run(context?: any): Promise<boolean> {
+    let promisesLength;
+    let val;
+    let input;
+    this.context = context;
+    this.cache = { };
+    this.promises = [];
+    this.errors = [];
+    input = this.input;
+    do {
+      await Promise.all(this.promises);
+      promisesLength = this.promises.length;
+      val = this.expression();
+      this.input = input;
+      if (this.errors.length > 0) {
+        throw new Error(this.errors.join('\n'));
+      }
+    } while (promisesLength !== this.promises.length);
+    return val;
+  }
+}
+
+export function querySync(queryString: string, context?: any): boolean {
+  return new Query(queryString).runSync(context);
+}
+
+export default function query(queryString: string, context?: any): Promise<boolean> {
+  return new Query(queryString).run(context);
+}

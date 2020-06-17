@@ -1,4 +1,4 @@
-import query, { querySync } from '../src';
+import query, { querySync, Query } from '../src';
 import assert = require('assert');
 
 describe('index', () => {
@@ -118,5 +118,25 @@ describe('index', () => {
                 },
             ))) }), true);
         });
+    });
+});
+
+describe('Query class', () => {
+    it('should be able to reuse query objects', () => {
+        const q = new Query('1 == 1');
+        assert.equal(q.runSync(), true);
+        assert.equal(q.runSync(), true);
+    });
+
+    it('should be able to reuse query objects with different contexts', () => {
+        const q = new Query('mykey == 1');
+        assert.equal(q.runSync({ mykey: 1}), true);
+        assert.equal(q.runSync({ mykey: 2}), false);
+    });
+
+    it('should be able to reuse query objects with different contexts with promises', async () => {
+        const q = new Query('mykey == 1');
+        assert.equal(await q.run({ mykey: () => Promise.resolve(1)}), true);
+        assert.equal(await q.run({ mykey: () => Promise.resolve(2)}), false);
     });
 });
