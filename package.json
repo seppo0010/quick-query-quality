@@ -1,6 +1,6 @@
 {
   "name": "quick-query-quality",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "quick query question",
   "main": "built/src/index.js",
   "scripts": {

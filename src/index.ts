@@ -32,93 +32,15 @@ const WhiteSpace = createToken({
 const allTokens = [WhiteSpace, LParen, RParen, NumberLiteral, Connector, And, Or, StringLiteral, GreaterThanOrEqual, GreaterThan, LessThanOrEqual, LessThan, Equal, NotEqual, ObjectPath];
 const QLexer = new Lexer(allTokens);
 
-export declare interface Query {
-  expression: any;
-  atomicExpression: any;
-  connectorExpression: any;
-  comparisonExpression: any;
-  parenthesisExpression: any;
-}
-
-export class Query extends EmbeddedActionsParser {
-  queryString: string;
+class QueryRunner {
   context: any;
   cache: any;
   promises: Promise<any>[] = [];
 
-  constructor(queryString: string) {
-    super(allTokens);
-    this.queryString = queryString;
-
-    const $ = this;
-
-    $.RULE('expression', () => {
-      return $.SUBRULE($.connectorExpression);
-    });
-
-    $.RULE('connectorExpression', () => {
-      let value: boolean;
-      let conn;
-      let rhsVal: boolean;
-
-      value = $.SUBRULE($.atomicExpression);
-      $.MANY(() => {
-        conn = $.CONSUME(Connector);
-        rhsVal = $.SUBRULE2($.atomicExpression);
-
-        if (tokenMatcher(conn, And)) {
-          value = value && rhsVal;
-        } else {
-          value = value || rhsVal;
-        }
-      });
-
-      return value;
-    });
-
-    $.RULE('atomicExpression', () => $.OR([
-      { ALT: () => $.SUBRULE($.parenthesisExpression)},
-      { ALT: () => $.SUBRULE($.comparisonExpression)},
-    ]));
-
-    $.RULE('comparisonExpression', () => {
-      let value;
-      let op;
-      let rhsVal;
-
-      const token = $.CONSUME(Value);
-      if (token.tokenType.name === 'RECORDING_PHASE_TOKEN') {
-        return;
-      }
-      value = this.getValue(token);
-      op = $.CONSUME(Comparison);
-      rhsVal = this.getValue($.CONSUME2(Value));
-
-      if (tokenMatcher(op, GreaterThan)) {
-          return value > rhsVal;
-      } else if (tokenMatcher(op, GreaterThanOrEqual)) {
-        return value >= rhsVal;
-      } else if (tokenMatcher(op, LessThan)) {
-        return value < rhsVal;
-      } else if (tokenMatcher(op, LessThanOrEqual)) {
-        return value <= rhsVal;
-      } else if (tokenMatcher(op, Equal)) {
-        return value === rhsVal;
-      } else if (tokenMatcher(op, NotEqual)) {
-        return value !== rhsVal;
-      }
-      return false;
-    });
-
-    $.RULE('parenthesisExpression', () => {
-      $.CONSUME(LParen);
-      const val = $.SUBRULE($.expression);
-      $.CONSUME(RParen);
-      return val;
-    });
-
-    this.performSelfAnalysis();
-    this.input = QLexer.tokenize(queryString).tokens;
+  constructor(context: any) {
+    this.context = context;
+    this.cache = { };
+    this.promises = [];
   }
 
   getValue(val: chevrotain.IToken): any {
@@ -150,43 +72,122 @@ export class Query extends EmbeddedActionsParser {
     }
     throw new Error('unimplemented value type');
   }
+}
+
+export class Query {
+  queryString: string;
+  parser: QueryParser;
+
+  constructor(queryString: string) {
+    this.queryString = queryString;
+    this.parser = new QueryParser(queryString);
+  }
 
   runSync(context?: any): boolean {
-    const input = this.input;
-    this.context = context;
-    this.cache = { };
-    this.promises = [];
-    this.errors = [];
-    const val = this.expression();
-    this.input = input;
-    if (this.promises.length) {
+    const runner = new QueryRunner(context);
+    const val = this.parser.expression(true, [runner]);
+    if (runner.promises.length) {
       throw new Error('Promise return in querySync is not supported.');
     }
-    if (this.errors.length > 0) {
-      throw new Error(this.errors.join('\n'));
-    }
+    this.parser.reset();
     return val;
   }
 
   async run(context?: any): Promise<boolean> {
     let promisesLength;
     let val;
-    let input;
-    this.context = context;
-    this.cache = { };
-    this.promises = [];
-    this.errors = [];
-    input = this.input;
+    const runner = new QueryRunner(context);
     do {
-      await Promise.all(this.promises);
-      promisesLength = this.promises.length;
-      val = this.expression();
-      this.input = input;
-      if (this.errors.length > 0) {
-        throw new Error(this.errors.join('\n'));
-      }
-    } while (promisesLength !== this.promises.length);
+      await Promise.all(runner.promises);
+      promisesLength = runner.promises.length;
+      val = this.parser.expression(true, [runner]);
+      this.parser.reset();
+    } while (promisesLength !== runner.promises.length);
     return val;
+  }
+}
+
+declare interface QueryParser {
+  expression: any;
+  atomicExpression: any;
+  connectorExpression: any;
+  comparisonExpression: any;
+  parenthesisExpression: any;
+}
+
+class QueryParser extends EmbeddedActionsParser {
+  constructor(queryString: string) {
+    super(allTokens);
+
+    const $ = this;
+
+    $.RULE('expression', (runner: QueryRunner) => {
+      return $.SUBRULE($.connectorExpression, { ARGS: [runner]});
+    });
+
+    $.RULE('connectorExpression', (runner: QueryRunner) => {
+      let value: boolean;
+      let conn;
+      let rhsVal: boolean;
+
+      value = $.SUBRULE($.atomicExpression, { ARGS: [runner]});
+      $.MANY(() => {
+        conn = $.CONSUME(Connector);
+        rhsVal = $.SUBRULE2($.atomicExpression, { ARGS: [runner]});
+
+        if (tokenMatcher(conn, And)) {
+          value = value && rhsVal;
+        } else {
+          value = value || rhsVal;
+        }
+      });
+
+      return value;
+    });
+
+    $.RULE('atomicExpression', (runner: QueryRunner) => $.OR([
+      { ALT: () => $.SUBRULE($.parenthesisExpression, { ARGS: [runner]})},
+      { ALT: () => $.SUBRULE($.comparisonExpression, { ARGS: [runner]})},
+    ]));
+
+    $.RULE('comparisonExpression', (runner: QueryRunner) => {
+      let value;
+      let op;
+      let rhsVal;
+
+      const token = $.CONSUME(Value);
+      if (token.tokenType.name === 'RECORDING_PHASE_TOKEN') {
+        return;
+      }
+      value = runner.getValue(token);
+      op = $.CONSUME(Comparison);
+      rhsVal = runner.getValue($.CONSUME2(Value));
+
+      if (tokenMatcher(op, GreaterThan)) {
+          return value > rhsVal;
+      } else if (tokenMatcher(op, GreaterThanOrEqual)) {
+        return value >= rhsVal;
+      } else if (tokenMatcher(op, LessThan)) {
+        return value < rhsVal;
+      } else if (tokenMatcher(op, LessThanOrEqual)) {
+        return value <= rhsVal;
+      } else if (tokenMatcher(op, Equal)) {
+        return value === rhsVal;
+      } else if (tokenMatcher(op, NotEqual)) {
+        return value !== rhsVal;
+      }
+      return false;
+    });
+
+    $.RULE('parenthesisExpression', (runner: QueryRunner) => {
+      $.CONSUME(LParen);
+      const val = $.SUBRULE($.expression, { ARGS: [runner]});
+      $.CONSUME(RParen);
+      return val;
+    });
+
+    this.performSelfAnalysis();
+    this.input = QLexer.tokenize(queryString).tokens;
   }
 }
 

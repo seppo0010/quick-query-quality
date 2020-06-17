@@ -139,4 +139,15 @@ describe('Query class', () => {
         assert.equal(await q.run({ mykey: () => Promise.resolve(1)}), true);
         assert.equal(await q.run({ mykey: () => Promise.resolve(2)}), false);
     });
+
+    it('should not mix async contexts', async () => {
+        const q = new Query('mykey == mykey2');
+        (await Promise.all(Array(100).fill(0).map((_, i) => {
+            return q.run({ mykey: () => new Promise((resolve, _reject) => {
+                setTimeout(() => {
+                    resolve(i);
+                }, i % 10);
+            }), mykey2: () => Promise.resolve(i) });
+        }))).forEach((v) => assert.equal(v, true));
+    });
 });
