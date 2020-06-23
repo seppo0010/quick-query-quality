@@ -159,6 +159,10 @@ describe('index', () => {
         });
         it('should accept objects', () => {
             assert.equal(querySync('{"mykey": "myvalue"} == obj', { obj: { mykey: 'myvalue' }}), true);
+            assert.equal(querySync('{"mykey": "myvalue2"} == obj', { obj: { mykey: 'myvalue' }}), false);
+            assert.equal(querySync('{"mykey2": "myvalue"} == obj', { obj: { mykey: 'myvalue' }}), false);
+            assert.equal(querySync('{} == obj', { obj: { mykey: 'myvalue' }}), false);
+            assert.equal(querySync('"dog" == obj', { obj: { mykey: 'myvalue' }}), false);
         });
     });
 });
