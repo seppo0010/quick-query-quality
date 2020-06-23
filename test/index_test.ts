@@ -146,6 +146,21 @@ describe('index', () => {
             ))) }), true);
         });
     });
+    describe('json', () => {
+        it('should accept booleans', () => {
+            assert.equal(querySync('true == true'), true);
+            assert.equal(querySync('true == false'), false);
+        });
+        it('should accept arrays', () => {
+            assert.equal(querySync('[0, 1, 2] == arr', { arr: [0, 1, 2]}), true);
+            assert.equal(querySync('[0, 1, 2] == arr', { arr: [0, 1, 3]}), false);
+            assert.equal(querySync('arr = [0, 1, 2]', { arr: [0, 1, 2]}), true);
+            assert.equal(querySync('arr = [0, 1, 2]', { arr: [0, 1, 3]}), false);
+        });
+        it('should accept objects', () => {
+            assert.equal(querySync('{"mykey": "myvalue"} == obj', { obj: { mykey: 'myvalue' }}), true);
+        });
+    });
 });
 
 describe('Query class', () => {
@@ -180,7 +195,7 @@ describe('Query class', () => {
 
     it('should throw an exception on invalid syntax', () => {
         assert.throws(() => {
-            new Query("fruit is fruit").runSync();
+            new Query('fruit is fruit').runSync();
         });
-    })
+    });
 });

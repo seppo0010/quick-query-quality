@@ -9,10 +9,9 @@ const And = createToken({ name: 'And', pattern: /AND/, categories: Connector});
 const Or = createToken({ name: 'Or', pattern: /OR/, categories: Connector});
 const LParen = createToken({ name: 'LParen', pattern: /\(/});
 const RParen = createToken({ name: 'RParen', pattern: /\)/});
-const Value = createToken({ name: 'Value', pattern: Lexer.NA });
-const NumberLiteral = createToken({ name: 'NumberLiteral', pattern: /-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?/, categories: Value});
-const StringLiteral = createToken({ name: 'StringLiteral', pattern: /"(?:[^"\\]|\\.)*"/, categories: Value});
-const ObjectPath = createToken({ name: 'ObjectPath', pattern: /[a-zA-Z][a-zA-Z0-9\.]*/, categories: Value});
+const NumberLiteral = createToken({ name: 'NumberLiteral', pattern: /-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?/});
+const StringLiteral = createToken({ name: 'StringLiteral', pattern: /"(?:[^"\\]|\\.)*"/});
+const ObjectPath = createToken({ name: 'ObjectPath', pattern: /[a-zA-Z][a-zA-Z0-9\.]*/});
 const Comparison = createToken({ name: 'Comparison', pattern: Lexer.NA });
 const GreaterThanOrEqual = createToken({ name: 'GreaterThanOrEqual', pattern: />=/, categories: Comparison});
 const GreaterThan = createToken({ name: 'GreaterThan', pattern: />[^=]/, categories: Comparison});
@@ -21,6 +20,25 @@ const LessThan = createToken({ name: 'LessThan', pattern: /<[^=]/, categories: C
 const Equal = createToken({ name: 'Equal', pattern: /={1,3}/, categories: Comparison});
 const NotEqual = createToken({ name: 'NotEqual', pattern: /!={1,2}/, categories: Comparison});
 
+const True = createToken({ name: 'True', pattern: /true/});
+const False = createToken({ name: 'False', pattern: /false/});
+const Null = createToken({ name: 'Null', pattern: /null/});
+const LCurly = createToken({ name: 'LCurly', pattern: /{/});
+const RCurly = createToken({ name: 'RCurly', pattern: /}/});
+const LSquare = createToken({ name: 'LSquare', pattern: /\[/});
+const RSquare = createToken({ name: 'RSquare', pattern: /]/});
+const Comma = createToken({ name: 'Comma', pattern: /,/});
+const Colon = createToken({ name: 'Colon', pattern: /:/});
+
+LParen.LABEL = '\'(\'';
+RParen.LABEL = '\')\'';
+LCurly.LABEL = '\'{\'';
+RCurly.LABEL = '\'}\'';
+LSquare.LABEL = '\'[\'';
+RSquare.LABEL = '\']\'';
+Comma.LABEL = '\',\'';
+Colon.LABEL = '\':\'';
+
 const WhiteSpace = createToken({
   name: 'WhiteSpace',
   pattern: /\s+/,
@@ -28,8 +46,19 @@ const WhiteSpace = createToken({
 });
 
 // whitespace is normally very common so it is placed first to speed up the lexer
-const allTokens = [WhiteSpace, LParen, RParen, NumberLiteral, Connector, And, Or, StringLiteral, GreaterThanOrEqual, GreaterThan, LessThanOrEqual, LessThan, Equal, NotEqual, ObjectPath];
+const allTokens = [WhiteSpace, LParen, RParen, NumberLiteral, Connector, And, Or, StringLiteral, GreaterThanOrEqual, GreaterThan,
+  LessThanOrEqual, LessThan, Equal, NotEqual, RCurly, LCurly, LSquare, RSquare, Comma, Colon, True, False, Null, ObjectPath];
 const QLexer = new Lexer(allTokens);
+
+function eq(lhs: any, rhs: any): boolean {
+  if (Array.isArray(lhs) && Array.isArray(rhs)) {
+    return lhs.length === rhs.length && lhs.every((val, i) => eq(val, rhs[i]));
+  }
+  if (typeof lhs === 'object' && typeof rhs === 'object' && lhs !== null && rhs !== null) {
+    return Object.keys(lhs).length === Object.keys(rhs).length && Object.keys(lhs).every((k) => eq(lhs[k], rhs[k]));
+  }
+  return lhs === rhs;
+}
 
 class QueryRunner {
   context: any;
@@ -42,9 +71,18 @@ class QueryRunner {
     this.promises = [];
   }
 
-  getValue(val: chevrotain.IToken): any {
-    if (tokenMatcher(val, NumberLiteral) || tokenMatcher(val, StringLiteral)) {
+  getValue(val: any): any {
+    if ([
+      NumberLiteral,
+      StringLiteral,
+      True,
+      False,
+      Null,
+    ].some((x) => tokenMatcher(val, x))) {
       return JSON.parse(val.image);
+    }
+    if (Array.isArray(val)) {
+      return val.map((v) => this.getValue(v));
     }
     if (tokenMatcher(val, ObjectPath)) {
       return val.image.split('.').reduce((v: { value: any, path: string[]}, key: string) => {
@@ -69,7 +107,7 @@ class QueryRunner {
         return { value: subv, path };
       }, { value: this.context, path: []}).value || null;
     }
-    throw new Error('unimplemented value type');
+    return Object.fromEntries(Object.entries(val).map(([k, v]) => [k, this.getValue(v)]));
   }
 }
 
@@ -120,6 +158,10 @@ declare interface QueryParser {
   connectorExpression: any;
   comparisonExpression: any;
   parenthesisExpression: any;
+  object: any;
+  array: any;
+  objectItem: any;
+  value: any;
 }
 
 class QueryParser extends EmbeddedActionsParser {
@@ -127,6 +169,63 @@ class QueryParser extends EmbeddedActionsParser {
     super(allTokens);
 
     const $ = this;
+
+    $.RULE('json', () => {
+      $.OR([
+        { ALT: () => $.SUBRULE($.object)},
+        { ALT: () => $.SUBRULE($.array)},
+      ]);
+    });
+
+    $.RULE('object', () => {
+      $.CONSUME(LCurly);
+      const obj: Record<string, any> = { };
+      $.MANY_SEP({
+        SEP: Comma, DEF: () => {
+          const [key, val] = $.SUBRULE($.objectItem);
+          if (typeof key !== 'undefined') {
+            obj[key] = val;
+          }
+        },
+      });
+      $.CONSUME(RCurly);
+      return obj;
+    });
+
+    $.RULE('objectItem', () => {
+      const key = $.CONSUME(StringLiteral);
+      $.CONSUME(Colon);
+      const val = $.SUBRULE($.value);
+      if (key.tokenType.name === 'RECORDING_PHASE_TOKEN') {
+        return ['', val];
+      }
+      return [JSON.parse(key.image), val];
+    });
+
+    $.RULE('array', () => {
+      $.CONSUME(LSquare);
+      const vals: any[] = [];
+      $.MANY_SEP({
+        SEP: Comma, DEF: () => {
+          vals.push($.SUBRULE($.value));
+        },
+      });
+      $.CONSUME(RSquare);
+      return vals;
+    });
+
+    $.RULE('value', () => {
+      return $.OR([
+        { ALT: () => $.CONSUME(StringLiteral)},
+        { ALT: () => $.CONSUME(NumberLiteral)},
+        { ALT: () => $.SUBRULE($.object)},
+        { ALT: () => $.SUBRULE($.array)},
+        { ALT: () => $.CONSUME(True)},
+        { ALT: () => $.CONSUME(False)},
+        { ALT: () => $.CONSUME(Null)},
+        { ALT: () => $.CONSUME(ObjectPath)},
+      ]);
+    });
 
     $.RULE('expression', (runner: QueryRunner, evaluate: boolean) => {
       return $.SUBRULE($.connectorExpression, { ARGS: [runner, evaluate]});
@@ -161,13 +260,13 @@ class QueryParser extends EmbeddedActionsParser {
     ]));
 
     $.RULE('comparisonExpression', (runner: QueryRunner, evaluate: boolean) => {
-      const token = $.CONSUME(Value);
-      if (token.tokenType.name === 'RECORDING_PHASE_TOKEN') {
+      const token = $.SUBRULE($.value) as any;
+      if (token.description === 'This Object indicates the Parser is during Recording Phase') {
         return;
       }
       const value = evaluate && runner.getValue(token);
       const op = $.CONSUME(Comparison);
-      const rhsToken = $.CONSUME2(Value);
+      const rhsToken = $.SUBRULE2($.value) as chevrotain.IToken;
       const rhsVal = evaluate && runner.getValue(rhsToken);
 
       if (tokenMatcher(op, GreaterThan)) {
@@ -179,7 +278,7 @@ class QueryParser extends EmbeddedActionsParser {
       } else if (tokenMatcher(op, LessThanOrEqual)) {
         return value <= rhsVal;
       } else if (tokenMatcher(op, Equal)) {
-        return value === rhsVal;
+        return eq(value, rhsVal);
       } else if (tokenMatcher(op, NotEqual)) {
         return value !== rhsVal;
       }
