@@ -177,4 +177,10 @@ describe('Query class', () => {
             }), mykey2: () => Promise.resolve(i) });
         }))).forEach((v) => assert.equal(v, true));
     });
+
+    it('should throw an exception on invalid syntax', () => {
+        assert.throws(() => {
+            new Query("fruit is fruit").runSync();
+        });
+    })
 });

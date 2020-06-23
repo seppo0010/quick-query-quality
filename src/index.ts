@@ -88,7 +88,11 @@ export class Query {
     if (runner.promises.length) {
       throw new Error('Promise return in querySync is not supported.');
     }
+    const errors = this.parser.errors.concat([]);
     this.parser.reset();
+    if (errors.length) {
+      throw new Error(errors.join('\n'));
+    }
     return val;
   }
 
@@ -100,7 +104,11 @@ export class Query {
       await Promise.all(runner.promises);
       promisesLength = runner.promises.length;
       val = this.parser.expression(true, [runner, true]);
+      const errors = this.parser.errors.concat([]);
       this.parser.reset();
+      if (errors.length) {
+        throw new Error(errors.join('\n'));
+      }
     } while (promisesLength !== runner.promises.length);
     return val;
   }
