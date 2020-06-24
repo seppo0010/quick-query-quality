@@ -8,35 +8,42 @@ const Connector = createToken({ name: 'Connector', pattern: Lexer.NA });
 const And = createToken({ name: 'And', pattern: /AND/, categories: Connector});
 const Or = createToken({ name: 'Or', pattern: /OR/, categories: Connector});
 const LParen = createToken({ name: 'LParen', pattern: /\(/});
+LParen.LABEL = '\'(\'';
 const RParen = createToken({ name: 'RParen', pattern: /\)/});
+RParen.LABEL = '\')\'';
 const NumberLiteral = createToken({ name: 'NumberLiteral', pattern: /-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?/});
 const StringLiteral = createToken({ name: 'StringLiteral', pattern: /"(?:[^"\\]|\\.)*"/});
-const ObjectPath = createToken({ name: 'ObjectPath', pattern: /[a-zA-Z][a-zA-Z0-9\.]*/});
+const PathSegment = createToken({ name: 'PathSegment', pattern: /[a-zA-Z][a-zA-Z0-9]*/});
+const Period = createToken({ name: 'Period', pattern: /./});
+Period.LABEL = '\'.\'';
 const Comparison = createToken({ name: 'Comparison', pattern: Lexer.NA });
 const GreaterThanOrEqual = createToken({ name: 'GreaterThanOrEqual', pattern: />=/, categories: Comparison});
+GreaterThanOrEqual.LABEL = '\'>=\'';
 const GreaterThan = createToken({ name: 'GreaterThan', pattern: />[^=]/, categories: Comparison});
+GreaterThan.LABEL = '\'>\'';
 const LessThanOrEqual = createToken({ name: 'LessThanOrEqual', pattern: /<=/, categories: Comparison});
+LessThanOrEqual.LABEL = '\'<=\'';
 const LessThan = createToken({ name: 'LessThan', pattern: /<[^=]/, categories: Comparison});
+LessThan.LABEL = '\'<\'';
 const Equal = createToken({ name: 'Equal', pattern: /={1,3}/, categories: Comparison});
+Equal.LABEL = '\'=\'';
 const NotEqual = createToken({ name: 'NotEqual', pattern: /!={1,2}/, categories: Comparison});
+NotEqual.LABEL = '\'!=\'';
 
 const True = createToken({ name: 'True', pattern: /true/});
 const False = createToken({ name: 'False', pattern: /false/});
 const Null = createToken({ name: 'Null', pattern: /null/});
 const LCurly = createToken({ name: 'LCurly', pattern: /{/});
-const RCurly = createToken({ name: 'RCurly', pattern: /}/});
-const LSquare = createToken({ name: 'LSquare', pattern: /\[/});
-const RSquare = createToken({ name: 'RSquare', pattern: /]/});
-const Comma = createToken({ name: 'Comma', pattern: /,/});
-const Colon = createToken({ name: 'Colon', pattern: /:/});
-
-LParen.LABEL = '\'(\'';
-RParen.LABEL = '\')\'';
 LCurly.LABEL = '\'{\'';
+const RCurly = createToken({ name: 'RCurly', pattern: /}/});
 RCurly.LABEL = '\'}\'';
+const LSquare = createToken({ name: 'LSquare', pattern: /\[/});
 LSquare.LABEL = '\'[\'';
+const RSquare = createToken({ name: 'RSquare', pattern: /]/});
 RSquare.LABEL = '\']\'';
+const Comma = createToken({ name: 'Comma', pattern: /,/});
 Comma.LABEL = '\',\'';
+const Colon = createToken({ name: 'Colon', pattern: /:/});
 Colon.LABEL = '\':\'';
 
 const WhiteSpace = createToken({
@@ -47,7 +54,7 @@ const WhiteSpace = createToken({
 
 // whitespace is normally very common so it is placed first to speed up the lexer
 const allTokens = [WhiteSpace, LParen, RParen, NumberLiteral, Connector, And, Or, StringLiteral, GreaterThanOrEqual, GreaterThan,
-  LessThanOrEqual, LessThan, Equal, NotEqual, RCurly, LCurly, LSquare, RSquare, Comma, Colon, True, False, Null, ObjectPath];
+  LessThanOrEqual, LessThan, Equal, NotEqual, RCurly, LCurly, LSquare, RSquare, Comma, Colon, True, False, Null, PathSegment, Period];
 const QLexer = new Lexer(allTokens);
 
 function eq(lhs: any, rhs: any): boolean {
@@ -70,44 +77,100 @@ class QueryRunner {
     this.cache = { };
     this.promises = [];
   }
+}
 
-  getValue(val: any): any {
-    if ([
-      NumberLiteral,
-      StringLiteral,
-      True,
-      False,
-      Null,
-    ].some((x) => tokenMatcher(val, x))) {
-      return JSON.parse(val.image);
+class Expression {
+  getValue(qr: QueryRunner): any { throw new Error('unimplemented'); }
+  toString(): string { throw new Error('unimplemented'); }
+}
+
+class LiteralExpression extends Expression {
+  token: chevrotain.IToken;
+
+  constructor(token: chevrotain.IToken) {
+    super();
+    this.token = token;
+  }
+  getValue(qr: QueryRunner): any {
+    return JSON.parse(this.token.image);
+  }
+
+  toString(): string {
+    return this.token.image;
+  }
+}
+
+class ArrayExpression extends Expression {
+  values: Expression[];
+
+  constructor(values: Expression[]) {
+    super();
+    this.values = values;
+  }
+  getValue(qr: QueryRunner): any {
+    return this.values.map((v) => v.getValue(qr));
+  }
+  toString(): string {
+    return `[${this.values.map((v) => v.toString())}]`;
+  }
+}
+
+class ObjectExpression extends Expression {
+  values: Record<string, Expression>;
+
+  constructor(values: Record<string, Expression>) {
+    super();
+    this.values = values;
+  }
+  getValue(qr: QueryRunner): any {
+    return Object.fromEntries(Object.entries(this.values).map(([k, v]) => [k, v.getValue(qr)]));
+  }
+  toString(): string {
+    return `{${Object.entries(this.values).map(([k, v]) => `${JSON.stringify(k)}: ${v.toString()},`).join('\n')}}`;
+  }
+}
+
+class PathSegmentExpression extends Expression {
+  token: chevrotain.IToken;
+  parent?: Expression;
+
+  constructor(token: chevrotain.IToken, parent?: Expression) {
+    super();
+    this.token = token;
+    this.parent = parent;
+  }
+
+  getValue(qr: QueryRunner): any {
+    const context = this.parent ? this.parent.getValue(qr) : qr.context;
+    if (context instanceof Promise) {
+      return context;
     }
-    if (Array.isArray(val)) {
-      return val.map((v) => this.getValue(v));
+    if (!context) {
+      return undefined;
     }
-    if (tokenMatcher(val, ObjectPath)) {
-      return val.image.split('.').reduce((v: { value: any, path: string[]}, key: string) => {
-        const path = v.path.concat([key]);
-        if (v.value instanceof Promise) {
-          return v;
+
+    let subv: any = context[this.token.image];
+    if (typeof(subv) === 'function') {
+      const strPath = this.toString();
+      if (typeof qr.cache[strPath] !== 'undefined') {
+        subv = qr.cache[strPath];
+      } else {
+        subv = subv();
+        qr.cache[strPath] = subv;
+        if (subv instanceof Promise) {
+          subv.then((subvResolved) => qr.cache[strPath] = subvResolved);
+          qr.promises.push(subv);
         }
-        let subv = v.value[key] || { };
-        if (typeof(subv) === 'function') {
-          const strPath = path.join('.');
-          if (typeof this.cache[strPath] !== 'undefined') {
-            subv = this.cache[strPath];
-          } else {
-            subv = subv();
-            this.cache[strPath] = subv;
-            if (subv instanceof Promise) {
-              subv.then((subvResolved) => this.cache[strPath] = subvResolved);
-              this.promises.push(subv);
-            }
-          }
-        }
-        return { value: subv, path };
-      }, { value: this.context, path: []}).value || null;
+      }
     }
-    return Object.fromEntries(Object.entries(val).map(([k, v]) => [k, this.getValue(v)]));
+    return subv;
+  }
+  toString(): string {
+    const parent = this.parent?.toString();
+    if (parent) {
+      return `${parent}.${this.token.image}`;
+    }
+    return this.token.image;
   }
 }
 
@@ -161,7 +224,9 @@ declare interface QueryParser {
   object: any;
   array: any;
   objectItem: any;
-  value: any;
+  value: (idx: number) => Expression;
+  objectPath: any;
+  functionCall: any;
 }
 
 class QueryParser extends EmbeddedActionsParser {
@@ -178,18 +243,18 @@ class QueryParser extends EmbeddedActionsParser {
     });
 
     $.RULE('object', () => {
+      const value: Record<string, Expression> = { };
       $.CONSUME(LCurly);
-      const obj: Record<string, any> = { };
       $.MANY_SEP({
         SEP: Comma, DEF: () => {
           const [key, val] = $.SUBRULE($.objectItem);
           if (typeof key !== 'undefined') {
-            obj[key] = val;
+            value[JSON.parse(key.image)] = val;
           }
         },
       });
       $.CONSUME(RCurly);
-      return obj;
+      return new ObjectExpression(value);
     });
 
     $.RULE('objectItem', () => {
@@ -199,7 +264,7 @@ class QueryParser extends EmbeddedActionsParser {
       if (key.tokenType.name === 'RECORDING_PHASE_TOKEN') {
         return ['', val];
       }
-      return [JSON.parse(key.image), val];
+      return [key, val];
     });
 
     $.RULE('array', () => {
@@ -211,20 +276,49 @@ class QueryParser extends EmbeddedActionsParser {
         },
       });
       $.CONSUME(RSquare);
-      return vals;
+      return new ArrayExpression(vals);
     });
 
     $.RULE('value', () => {
       return $.OR([
-        { ALT: () => $.CONSUME(StringLiteral)},
-        { ALT: () => $.CONSUME(NumberLiteral)},
+        { ALT: () => new LiteralExpression($.CONSUME(StringLiteral))},
+        { ALT: () => new LiteralExpression($.CONSUME(NumberLiteral))},
         { ALT: () => $.SUBRULE($.object)},
         { ALT: () => $.SUBRULE($.array)},
-        { ALT: () => $.CONSUME(True)},
-        { ALT: () => $.CONSUME(False)},
-        { ALT: () => $.CONSUME(Null)},
-        { ALT: () => $.CONSUME(ObjectPath)},
+        { ALT: () => new LiteralExpression($.CONSUME(True))},
+        { ALT: () => new LiteralExpression($.CONSUME(False))},
+        { ALT: () => new LiteralExpression($.CONSUME(Null))},
+        { ALT: () => $.SUBRULE($.objectPath)},
       ]);
+    });
+
+    $.RULE('objectPath', () => {
+      let val = new PathSegmentExpression($.CONSUME(PathSegment));
+
+      $.OPTION(() => {
+        $.CONSUME(Period);
+        $.MANY_SEP({
+          SEP: Period, DEF: () => {
+            val = $.OR([
+              { ALT: () => new PathSegmentExpression($.CONSUME1(PathSegment), val)},
+              { ALT: () => $.SUBRULE($.functionCall)},
+            ]);
+          },
+        });
+      });
+      return val;
+    });
+
+    $.RULE('functionCall', () => {
+      $.CONSUME(LParen);
+      const vals: any[] = [];
+      $.MANY_SEP({
+        SEP: Comma, DEF: () => {
+          vals.push($.SUBRULE($.value));
+        },
+      });
+      $.CONSUME(RParen);
+      return vals;
     });
 
     $.RULE('expression', (runner: QueryRunner, evaluate: boolean) => {
@@ -260,14 +354,11 @@ class QueryParser extends EmbeddedActionsParser {
     ]));
 
     $.RULE('comparisonExpression', (runner: QueryRunner, evaluate: boolean) => {
-      const token = $.SUBRULE($.value) as any;
-      if (token.description === 'This Object indicates the Parser is during Recording Phase') {
-        return;
-      }
-      const value = evaluate && runner.getValue(token);
+      const token = $.SUBRULE($.value);
+      const value = evaluate && token.getValue(runner);
       const op = $.CONSUME(Comparison);
-      const rhsToken = $.SUBRULE2($.value) as chevrotain.IToken;
-      const rhsVal = evaluate && runner.getValue(rhsToken);
+      const rhsToken = $.SUBRULE2($.value);
+      const rhsVal = evaluate && rhsToken.getValue(runner);
 
       if (tokenMatcher(op, GreaterThan)) {
         return value > rhsVal;
