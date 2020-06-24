@@ -1,4 +1,9 @@
 import * as chevrotain from 'chevrotain';
+declare global { // https://github.com/microsoft/TypeScript/issues/30933#issuecomment-586735655
+  interface ObjectConstructor {
+    fromEntries(xs: [string|number|symbol, any][]): object
+  }
+}
 const createToken = chevrotain.createToken;
 const tokenMatcher = chevrotain.tokenMatcher;
 const Lexer = chevrotain.Lexer;
