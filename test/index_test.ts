@@ -165,6 +165,14 @@ describe('index', () => {
             assert.equal(querySync('"dog" == obj', { obj: { mykey: 'myvalue' }}), false);
         });
     });
+    describe('functions', () => {
+        it('should be able to call functions with parameters', () => {
+            assert.equal(querySync('add(1, 2) == 3', { add: (v1: number, v2: number) => v1 + v2}), true);
+        });
+        it('should be able to call functions with promises', async () => {
+            assert.equal(await query('add(1, 2) == 3', { add: (v1: number, v2: number) => Promise.resolve(v1 + v2)}), true);
+        });
+    });
 });
 
 describe('Query class', () => {

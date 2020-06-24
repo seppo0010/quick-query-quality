@@ -130,47 +130,78 @@ class ObjectExpression extends Expression {
   }
 }
 
-class PathSegmentExpression extends Expression {
-  token: chevrotain.IToken;
+class ObjectPathExpression extends Expression {
   parent?: Expression;
 
-  constructor(token: chevrotain.IToken, parent?: Expression) {
+  constructor(parent?: Expression) {
     super();
-    this.token = token;
     this.parent = parent;
   }
 
+  getValueOrFunction(qr: QueryRunner): any {
+    throw new Error('unimplemented');
+  }
+
   getValue(qr: QueryRunner): any {
-    const context = this.parent ? this.parent.getValue(qr) : qr.context;
-    if (context instanceof Promise) {
-      return context;
+    let val = this.getValueOrFunction(qr);
+    const strPath = this.toString();
+    if (typeof qr.cache[strPath] !== 'undefined') {
+      val = qr.cache[strPath];
     }
-    if (!context) {
+    if (typeof(val) === 'function') {
+      val = val();
+      qr.cache[strPath] = val;
+    }
+    if (val instanceof Promise) {
+      val.then((subvResolved) => qr.cache[strPath] = subvResolved);
+      qr.promises.push(val);
+    }
+    return val;
+  }
+}
+
+class PathSegmentExpression extends ObjectPathExpression {
+  token: chevrotain.IToken;
+
+  constructor(token: chevrotain.IToken, parent?: Expression) {
+    super(parent);
+    this.token = token;
+  }
+
+  getValueOrFunction(qr: QueryRunner): any {
+    const context = this.parent ? this.parent.getValue(qr) : qr.context;
+    if (!context || context instanceof Promise) {
       return undefined;
     }
-
-    let subv: any = context[this.token.image];
-    if (typeof(subv) === 'function') {
-      const strPath = this.toString();
-      if (typeof qr.cache[strPath] !== 'undefined') {
-        subv = qr.cache[strPath];
-      } else {
-        subv = subv();
-        qr.cache[strPath] = subv;
-        if (subv instanceof Promise) {
-          subv.then((subvResolved) => qr.cache[strPath] = subvResolved);
-          qr.promises.push(subv);
-        }
-      }
-    }
-    return subv;
+    return context[this.token.image];
   }
+
   toString(): string {
     const parent = this.parent?.toString();
     if (parent) {
       return `${parent}.${this.token.image}`;
     }
     return this.token.image;
+  }
+}
+
+class FunctionCallExpression extends ObjectPathExpression {
+  args: Expression[];
+
+  constructor(args: Expression[], parent?: Expression) {
+    super(parent);
+    this.args = args;
+  }
+
+  getValueOrFunction(qr: QueryRunner): any {
+    const func = (this.parent! as ObjectPathExpression).getValueOrFunction(qr) as (...args: any[]) => any;
+    const self = (this.parent! as ObjectPathExpression).parent?.getValue(qr);
+    const res = func.apply(self, this.args.map((v) => v.getValue(qr)));
+    return res;
+  }
+
+  toString(): string {
+    return `(${this.args.map((v) => v.toString())})`;
   }
 }
 
@@ -293,32 +324,30 @@ class QueryParser extends EmbeddedActionsParser {
     });
 
     $.RULE('objectPath', () => {
-      let val = new PathSegmentExpression($.CONSUME(PathSegment));
+      let val: ObjectPathExpression = new PathSegmentExpression($.CONSUME(PathSegment));
 
-      $.OPTION(() => {
-        $.CONSUME(Period);
-        $.MANY_SEP({
-          SEP: Period, DEF: () => {
-            val = $.OR([
-              { ALT: () => new PathSegmentExpression($.CONSUME1(PathSegment), val)},
-              { ALT: () => $.SUBRULE($.functionCall)},
-            ]);
-          },
-        });
+      $.MANY(() => {
+          $.OR([
+            { ALT: () => {
+              $.CONSUME(Period);
+              val = new PathSegmentExpression($.CONSUME1(PathSegment), val);
+            }},
+            { ALT: () => { val = new FunctionCallExpression($.SUBRULE($.functionCall), val); }},
+          ]);
       });
       return val;
     });
 
     $.RULE('functionCall', () => {
       $.CONSUME(LParen);
-      const vals: any[] = [];
+      const args: any[] = [];
       $.MANY_SEP({
         SEP: Comma, DEF: () => {
-          vals.push($.SUBRULE($.value));
+          args.push($.SUBRULE($.value));
         },
       });
       $.CONSUME(RParen);
-      return vals;
+      return args;
     });
 
     $.RULE('expression', (runner: QueryRunner, evaluate: boolean) => {
