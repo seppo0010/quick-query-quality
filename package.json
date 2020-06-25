@@ -16,6 +16,7 @@
   "bugs": {
     "url": "https://github.com/seppo0010/qqq/issues"
   },
+  "engines" : { "node" : ">=12" },
   "homepage": "https://github.com/seppo0010/qqq#readme",
   "dependencies": {
     "@types/node": "^14.0.1",
