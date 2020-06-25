@@ -200,6 +200,9 @@ class FunctionCallExpression extends ObjectPathExpression {
 
   getValueOrFunction(qr: QueryRunner): any {
     const func = (this.parent! as ObjectPathExpression).getValueOrFunction(qr) as (...args: any[]) => any;
+    if (typeof func === 'undefined' || func === null) {
+      return undefined;
+    }
     const self = (this.parent! as ObjectPathExpression).parent?.getValue(qr);
     const res = func.apply(self, this.args.map((v) => v.getValue(qr)));
     return res;
